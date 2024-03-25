@@ -44,78 +44,83 @@ class MainViewModel @Inject constructor(
     }
 
     private fun generateAiContent(prompt: String) {
+
         job?.cancel()
         job = viewModelScope.launch {
-            _state.value = state.value.copy(
-                promptInProgress = prompt
-            )
-            isAiResponseLoading.value = true
-            enableRetryPrompt.value = ""
-            val stringResponse = StringBuilder()
-            try {
-                if (state.value.currentThreadId == null) {
-                    _state.value = _state.value.copy(
-                        currentThreadId = UUID.randomUUID().toString()
-                    )
-                }
-                val promptId =
-                    UUID.randomUUID().toString()
-                val index = state.value.chatHistory.size
-                chatHistoryUsecases.generateGeminiResponse.invoke(
-                    prompt,
-                    state.value.chatHistory,
-                    state.value.currentThreadId!!,
-                    promptId
-                ).collect { contentRes ->
-                    if (isAiResponseLoading.value) {
-                        _state.value = state.value.copy(
-                            promptInProgress = ""
-                        )
-
-                        _state.value.chatHistory.add(
-                            ChatHistoryDto(
-                                role = "user", promptId = promptId,
-                                threadId = state.value.currentThreadId!!,
-                                aiResponse = prompt
-                            )
+            if (prompt.isNotEmpty()) {
+                _state.value = state.value.copy(
+                    promptInProgress = prompt
+                )
+                isAiResponseLoading.value = true
+                enableRetryPrompt.value = ""
+                val stringResponse = StringBuilder()
+                try {
+                    if (state.value.currentThreadId == null) {
+                        _state.value = _state.value.copy(
+                            currentThreadId = UUID.randomUUID().toString()
                         )
                     }
-                    if (promptId == contentRes.promptId) {
-                        stringResponse.append(contentRes.aiResponse)
-                        contentRes.aiResponse = stringResponse.toString()
+                    val promptId =
+                        UUID.randomUUID().toString()
+                    val index = state.value.chatHistory.size
+                    chatHistoryUsecases.generateGeminiResponse.invoke(
+                        prompt,
+                        state.value.chatHistory,
+                        state.value.currentThreadId!!,
+                        promptId
+                    ).collect { contentRes ->
                         if (isAiResponseLoading.value) {
-                            _state.value.chatHistory.add(index + 1, contentRes)
-                        } else {
-                            _state.value.chatHistory.removeAt(index + 1)
-                            val chatH: MutableList<ChatHistoryDto> = mutableListOf()
-                            chatH.addAll(_state.value.chatHistory)
-                            _state.value.chatHistory.clear()
-                            _state.value = _state.value.copy(
-                                chatHistory = chatH
+                            _state.value = state.value.copy(
+                                promptInProgress = ""
                             )
-                            _state.value.chatHistory.add(index + 1, contentRes)
 
+                            _state.value.chatHistory.add(
+                                ChatHistoryDto(
+                                    role = "user", promptId = promptId,
+                                    threadId = state.value.currentThreadId!!,
+                                    aiResponse = prompt
+                                )
+                            )
                         }
+                        if (promptId == contentRes.promptId) {
+                            stringResponse.append(contentRes.aiResponse)
+                            contentRes.aiResponse = stringResponse.toString()
+                            if (isAiResponseLoading.value) {
+                                _state.value.chatHistory.add(index + 1, contentRes)
+                            } else {
+                                _state.value.chatHistory.removeAt(index + 1)
+                                val chatH: MutableList<ChatHistoryDto> = mutableListOf()
+                                chatH.addAll(_state.value.chatHistory)
+                                _state.value.chatHistory.clear()
+                                _state.value = _state.value.copy(
+                                    chatHistory = chatH
+                                )
+                                _state.value.chatHistory.add(index + 1, contentRes)
+
+                            }
+                        }
+                        isAiResponseLoading.value = false
+                    }
+                } catch (ex: Exception) {
+                    if (stringResponse.isEmpty()) {
+                        enableRetryPrompt.value = "Something went wrong"
                     }
                     isAiResponseLoading.value = false
-                }
-            } catch (ex: Exception) {
-                if (stringResponse.isEmpty()) {
-                    enableRetryPrompt.value = "Something went wrong"
-                }
-                isAiResponseLoading.value = false
-                if (ex is PromptBlockedException) {
-                    val stringBuilder = StringBuilder()
-                    ex.response.promptFeedback?.safetyRatings?.forEach {
-                        if (it.probability != HarmProbability.NEGLIGIBLE) {
-                            stringBuilder.append("${it.probability.name} ${it.category.name} Content\n")
+                    if (ex is PromptBlockedException) {
+                        val stringBuilder = StringBuilder()
+                        ex.response.promptFeedback?.safetyRatings?.forEach {
+                            if (it.probability != HarmProbability.NEGLIGIBLE) {
+                                stringBuilder.append("${it.probability.name} ${it.category.name} Content\n")
+                            }
                         }
-                    }
-                    enableRetryPrompt.value = stringBuilder.toString()
+                        enableRetryPrompt.value = stringBuilder.toString()
 //                    _eventFlow.emit(UiEvent.ShowToast(stringBuilder.toString()))
-                } else {
-                    _eventFlow.emit(UiEvent.ShowToast(ex.message.toString()))
+                    } else {
+                        _eventFlow.emit(UiEvent.ShowToast(ex.message.toString()))
+                    }
                 }
+            } else {
+                _eventFlow.emit(UiEvent.ShowToast("Prompt can't be empty!"))
             }
         }
     }

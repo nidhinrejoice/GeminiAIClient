@@ -25,3 +25,5 @@ replay_pid*
 .gradle/
 .idea/
 local.properties
+app/release/baselineProfiles/1/app-release.dm
+app/release/gemini_client.apk

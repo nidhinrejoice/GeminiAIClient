@@ -12,7 +12,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,13 +31,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.twotone.Send
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +84,12 @@ import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.nidhin.geminiclient.R
-import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.*
+import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.ClearChat
+import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.GenerateAiContent
+import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.GetChatDetails
+import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.GetThreadHistory
+import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.NewChat
+import com.nidhin.geminiclient.feature_learning.presentation.MainViewModel.UserAction.RetryPrompt
 import com.nidhin.geminiclient.ui.theme.GeminiClientTheme
 import com.nidhin.geminiclient.utils.showCustomToast
 import dagger.hilt.android.AndroidEntryPoint
@@ -101,7 +108,8 @@ class MainActivity : ComponentActivity() {
         toast = Toast(this)
         lifecycleScope.launch {
             viewModel.eventFlow.collectLatest {
-                toast.showCustomToast(this@MainActivity, it.toString())
+                if (it is MainViewModel.UiEvent.ShowToast)
+                    toast.showCustomToast(this@MainActivity, it.message)
             }
         }
         setContent {
@@ -186,7 +194,7 @@ class MainActivity : ComponentActivity() {
 }
 
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MultiChatScreen(
     viewModel: MainViewModel,
@@ -201,7 +209,7 @@ fun MultiChatScreen(
     ) {
 
         val scope = rememberCoroutineScope()
-        val (chatRef, promptRef, optionsRef) = createRefs()
+        val (chatRef, promptRef, sendButton, optionsRef) = createRefs()
         val text = remember { mutableStateOf("") }
         val keyboardController = LocalSoftwareKeyboardController.current
         Row(modifier = Modifier.constrainAs(optionsRef) {
@@ -226,37 +234,38 @@ fun MultiChatScreen(
                     Text(text = "Reset Chat")
                 }
         }
-        Column(modifier = Modifier
-            .fillMaxWidth()
-            .constrainAs(promptRef) {
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-                bottom.linkTo(parent.bottom)
-            }
-        ) {
-            OutlinedTextField(
-                value = text.value,
-                enabled = !viewModel.isAiResponseLoading.value,
-                onValueChange = { text.value = it },
-                label = { Text("Enter your query here") },
-                placeholder = { Text("Enter your query here") },
-                modifier = Modifier
-                    .fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        keyboardController?.hide()
-                        viewModel.userAction(GenerateAiContent(text.value))
-                        text.value = ""
-                        scope.launch {
-                            lazyListState.animateScrollToItem(
-                                viewModel.state.value.chatHistory.size,
-                                0
-                            )
-                        }
-                    }
-                )
-            )
+        OutlinedTextField(
+            value = text.value,
+            enabled = !viewModel.isAiResponseLoading.value,
+            onValueChange = { text.value = it },
+            label = { Text("Enter your chat") },
+            placeholder = { Text("Enter your chat") },
+            modifier = Modifier
+                .constrainAs(promptRef) {
+                    start.linkTo(parent.start)
+                    end.linkTo(sendButton.start)
+                    bottom.linkTo(parent.bottom)
+                    width = Dimension.fillToConstraints
+                }
+        )
+        FilledIconButton(
+            modifier = Modifier
+                .constrainAs(sendButton) {
+                    top.linkTo(promptRef.top)
+                    end.linkTo(parent.end)
+                    bottom.linkTo(parent.bottom)
+                }, onClick = {
+                keyboardController?.hide()
+                viewModel.userAction(GenerateAiContent(text.value))
+                text.value = ""
+                scope.launch {
+                    lazyListState.animateScrollToItem(
+                        viewModel.state.value.chatHistory.size,
+                        0
+                    )
+                }
+            }) {
+            Icon(imageVector = Icons.TwoTone.Send, contentDescription = "Send")
         }
         Column(
             modifier = Modifier
@@ -411,6 +420,7 @@ fun PromptInProgress(visibility: Boolean, prompt: String) {
                     modifier = Modifier.padding(8.dp)
                 )
             }
+//            SpeechBubble(prompt)
         }
     }
 }
